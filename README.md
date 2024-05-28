@@ -1,23 +1,21 @@
 # How to create an IPsec VPN between Unifi USG and Mikrotik firewalls
 * Hardware and software
-    * Unifi USG XG-8 v4.4.44.5213871
-    * Unifi Controller version 5.12.35
-    * Mikrotik CCR1036-8G-2S+ with RouterOS v6.44.5
+    * Unifi UDM SE Unifi OS version 4.0.3
+    * Unifi Network Application version 8.2.92
+    * Mikrotik RB5009UG+S+IN with RouterOS v7.14.3
     
 * Sources:
-    * EdgeRouter to MikroTik IPSec VPN Setup by Willie Howe
-        * https://www.youtube.com/watch?v=70EIA4bF820
-    * UniFi - USG/UDM VPN: How to Configure Site-to-Site VPN
-        * https://help.ubnt.com/hc/en-us/articles/360002426234-UniFi-USG-UDM-VPN-How-to-Configure-Site-to-Site-VPN
-        
+    * UniFi Gateway - Site-to-Site IPsec VPN with Third-Party Gateways (Advanced)
+        * https://help.ui.com/hc/en-us/articles/7983431932439-UniFi-Gateway-Site-to-Site-IPsec-VPN-with-Third-Party-Gateways-Advanced  
+                
 ## Mikrotik configuration in WebFig interface
 ### Select: IP -> IPsec -> Peers
 
 | Add New | |
 | - | - |
 | Enabled | checked
-| Name | USG-01
-| Address |	USG WAN address
+| Name | ***UNIFI-01***
+| Address |	UDM WAN address
 | Port | empty
 | Local Address | Mikrotik WAN address
 | Auth. Method | pre shared key
@@ -28,14 +26,14 @@
 ### Select: IP -> IPsec -> Profiles
 | New Profile | |
 | - | - |
-| Name | profile01
+| Name | ***profile-unifi***
 | Hash Algorithms | sha1
 | Encryption Algorithm | aes-128
-| DH Group | modp1024 (=DH Group 2), modp2048
+| DH Group | modp2048 (=DH Group 14 to leave Unifi settings in Auto state)
 | Proposal Check | obey
-| Lifetime | 1d 00:00:00
+| Lifetime |  08:00:00
 | Lifebytes | empty
-| Nat Traversal | uncheck (or check?)
+| Nat Traversal | uncheck 
 | DPD Interval | 60s
 | DPD Maximum Failures | 5
 
@@ -43,9 +41,10 @@
 | Add New | |
 | - | - |
 | Enabled |	checked
-| Peer | USG-01
+| Peer | ***UNIFI-01***
 | Auth. Method |			pre shared key
 | Secret | paste your secret
+| Notrack Chain | empty
 | Policy Template Group | default
 | Notrack Chain | empty
 | My ID Type | auto
@@ -56,35 +55,33 @@
 
 ### Select: IP -> IPsec -> Proposals
 
-| Check default | |
+|  Add New  | |
 | - | - |
 | Enabled | checked
-| Name | default
+| Name | ***proposal-unifi***
 | Auth. Algorithms | sha1
-| Encr. Algorithms | aes-128 cbc
-| | aes-256 cbc
-| | aes-128 ctr
-| Lifetime | empty
-| PFS Group | modp1024
+| Encr. Algorithms | aes-128 cbc (to use Unifi in Auto)
+| Lifetime | 08:00:00 (to match Unifi Auto)
+| PFS Group | modp2048
 
 ### Select: IP -> IPsec -> Policies
-* Disable default
+*You don't have to Disable default
 
 | Add New IPsec Policy | |
 | - | - |
 | Enabled | checked |
-| Src. Address | Mikrotik internal LAN network address (the whole network e.g. 192.168.1.0/24) |
+| Peer | ***UNIFI-01*** 
+| Tunnel | checked
+| Src. Address | Mikrotik internal LAN network address (the whole network e.g. 192.168.88.0/24) |
 | Src. Port | empty
 | Dst. Address | USG internal LAN network address
 | Dst. Port | empty
 | Protocol | 255 (all)
+| Template | uncheck
 | Action | encrypt
-| Level | unique ( Default was "require", but to establish connection with multiple network subnets it needs to be "unique". More information in https://blog.bravi.org/?p=1209 )
+| Level | unique (Default was "require", but to establish connection with multiple network subnets it needs to be "unique".)
 | IPsec Protocols | esp
-| Tunnel | checked
-| SA Src. Address | Mikrotik WAN address
-| SA Dst. Address | USG WAN address
-| Proposal | default
+| Proposal | ***proposal-unifi***
 
 ### Select: IP -> Firewall -> NAT
 | New NAT Rule | |
@@ -96,29 +93,34 @@
 
 * Move the rule to the top of the firewall rules.
 
-## USG configuration (version 5.12.35)
-### Settings -> VPN -> Create New VPN Connection
+## Unifi Network Application configuration (version 8.2.92)
+### Settings -> VPN -> Sit-to-Site VPN ->Create New 
 | Configurations | |
 | - | - |
-| Name| mikrotik-usg-vpn |
-| Purpose | Site-to-Site VPN |
-| VPN Type | Manual IPsec |
-| Enabled | check, Enable this Site-to-Site VPN |
-| Remote Subnets | Mikrotik subnets |
-| Route Distance | 30 was default | 
-| Peer IP | WAN IP of Mikrotik |
-| Local WAN IP | WAN IP of USG |
+| Name| mikrotik-unifi-vpn |
 | Pre-Shared Key | secret key |
+| Local IP | WAN IP of UDM  or Enter IP Address manually |
+| Peer IP / Host| WAN IP of Mikrotik |
+| VPN Type | Policy Based |
+| Remote Networks | Mikrotik subnets |
 | IPsec Profile | Customized | 
-| **Advanced Options** | |
+| **Advanced** | Auto (here is the default values) |
 | Key Exchange Version | IKEv1
+| **IKE** | |
 | Encryption | AES-128
 | Hash | SHA1
-| DH Group | 2
-| PFS | checked, Enable prefect forward secrecy
-| Dynamic Routing | unchecked, Enable dynamic routing
+| DH Group | 14
+| Lifetime | 28800
+| **ESP** | |
+| Encryption | AES-128
+| Hash | SHA1
+| DH Group | 14
+| Lifetime | 3600
+| Prefect Forward Secrecy (PFS) | checked 
+| Local Authentication ID | Auto checked (WAN IP of UDM)
+| Remote Authentication ID | Auto checked (WAN IP of Mikrotik)
 
-## Mikrotik IPsec -> Installed SAs
+## Mikrotik IP -> IPsec -> Installed SAs
 * Something like this should show up when connection is up
 
 | | SPI	| Src. Address | Dst. Address |Auth. Algorithm | Encr. Algorithm | Encr. Key Size | Current Bytes
